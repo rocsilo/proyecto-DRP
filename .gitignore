@@ -1,0 +1,5 @@
+# Binarios de Terraform
+.terraform/
+terraform.exe
+*.tfstate
+*.tfstate.backup
