@@ -1,5 +1,5 @@
 # =====================================================================
-# DRP GRUPO 5: SERVIDOR DE RESCATE AUTOMÁTICO (CORREGIDO - INYECCIÓN SQL)
+# DRP GRUPO 5: SERVIDOR DE RESCATE (VERSIÓN FINAL - SIN INSTALACIÓN)
 # =====================================================================
 
 resource "aws_instance" "drp_server" {
@@ -14,40 +14,49 @@ resource "aws_instance" "drp_server" {
 
   user_data = <<-EOF
 #!/bin/bash
+# Log de todo lo que pase para auditoría
 exec > >(tee /var/log/user-data.log|logger -t user-data -s 2>/dev/console) 2>&1
 
-echo "🚀 Iniciando Recuperación Total - Grupo 5..."
+echo "🚀 Iniciando Recuperación Total Blindada - Grupo 5..."
 
-# --- FASE 1: INSTALACIÓN ---
 apt-get update -y
 apt-get install -y docker.io docker-compose awscli tar
 systemctl start docker
 systemctl enable docker
 
-# --- FASE 2: CARPETAS ---
 DIR_BASE="/opt/drp"
-DIR_GITEA_DATA="$DIR_BASE/nfs_data/gitea"
-DIR_LDAP_DATA="$DIR_BASE/ldap_data"
+DIR_NFS="$DIR_BASE/nfs_data"
+DIR_DB_INIT="$DIR_BASE/db_init"
 BUCKET_NAME="drp-gitea-backups-grup5-2026"
 
-mkdir -p $DIR_GITEA_DATA
-mkdir -p $DIR_LDAP_DATA
+mkdir -p $DIR_NFS
+mkdir -p $DIR_DB_INIT
+mkdir -p $DIR_BASE/ldap_data
 
-# --- FASE 3: DESCARGA DE S3 ---
+echo "⬇️ Descargando el backup 'pesado' de S3..."
 aws s3 sync s3://$BUCKET_NAME/gitea/ /tmp/gitea_backup/
 aws s3 sync s3://$BUCKET_NAME/ldap/ /tmp/ldap_backup/
 
 LATEST_GITEA=$(ls -t /tmp/gitea_backup/*.tar.gz | head -1)
 if [ -n "$LATEST_GITEA" ]; then
-    tar -xzf "$LATEST_GITEA" -C $DIR_GITEA_DATA/
+    echo "📦 Descomprimiendo estructura completa (git, gitea, ssh)..."
+    # Extraemos directamente en nfs_data
+    tar -xzf "$LATEST_GITEA" -C $DIR_NFS/
 fi
 
 LATEST_LDAP=$(ls -t /tmp/ldap_backup/*.ldif | head -1)
 if [ -n "$LATEST_LDAP" ]; then
-    cp "$LATEST_LDAP" $DIR_LDAP_DATA/backup.ldif
+    cp "$LATEST_LDAP" $DIR_BASE/ldap_data/backup.ldif
 fi
 
-# --- FASE 4: DOCKER COMPOSE ---
+echo "🔍 Moviendo el SQL a la carpeta de inyección de MariaDB..."
+# Buscamos el .sql en cualquier subcarpeta y lo movemos a db_init
+find $DIR_NFS -name "gitea_db.sql" -exec mv {} $DIR_DB_INIT/init.sql \;
+
+# 🛠️ AJUSTE DE PERMISOS CRÍTICO: Gitea usa el UID 1000
+chown -R 1000:1000 $DIR_NFS
+chmod -R 755 $DIR_NFS
+
 cat << 'COMPOSE' > $DIR_BASE/docker-compose.yml
 version: '3.3'
 services:
@@ -61,12 +70,13 @@ services:
     container_name: drp_db
     restart: always
     environment:
-      - MYSQL_ROOT_PASSWORD=gitea
+      - MYSQL_ROOT_PASSWORD=Admin10.
       - MYSQL_DATABASE=gitea
       - MYSQL_USER=gitea
-      - MYSQL_PASSWORD=gitea
+      - MYSQL_PASSWORD=Admin10.
     volumes:
       - db_data:/var/lib/mysql
+      - ./db_init:/docker-entrypoint-initdb.d
 
   ldap:
     image: osixia/openldap:latest
@@ -88,12 +98,17 @@ services:
       - GITEA__database__HOST=db:3306
       - GITEA__database__NAME=gitea
       - GITEA__database__USER=gitea
-      - GITEA__database__PASSWD=gitea
+      - GITEA__database__PASSWD=Admin10.
+      # 🛡️ SEGURO ANTI-INSTALACIÓN:
+      - GITEA__security__INSTALL_LOCK=true
+      - USER_UID=1000
+      - USER_GID=1000
     ports:
       - "80:3000"
       - "222:22"
     volumes:
-      - ./nfs_data/gitea:/data
+      # Mapeamos la carpeta que contiene git/, gitea/ y ssh/
+      - ./nfs_data:/data
     depends_on:
       - db
       - ldap
@@ -102,26 +117,13 @@ volumes:
   db_data:
 COMPOSE
 
-# --- FASE 5: PERMISOS ---
-chown -R 1000:1000 $DIR_BASE/nfs_data
-chmod -R 755 $DIR_BASE/nfs_data
-
-# --- FASE 6: EL ARRANQUE E INYECCIÓN (EL "SQLDAM") ---
-echo "Levantando contenedores..."
+echo "⚙️ Arrancando servicios por fases..."
 cd $DIR_BASE
-sudo docker-compose up -d
-
-echo "Esperando a que MariaDB esté lista para el SQLDAM..."
-# Esperamos 45 segundos para asegurar que el motor de la BD ha arrancado
+sudo docker-compose up -d db redis ldap
+echo "⏳ Espera de seguridad para la DB..."
 sleep 45
+sudo docker-compose up -d gitea
 
-echo "Inyectando el SQL Dump en la base de datos..."
-# Este es el comando que mete vuestro backup directamente al motor de la BD
-docker exec -i drp_db mysql -u gitea -pgitea gitea < $DIR_GITEA_DATA/gitea_db.sql
-
-echo "Reiniciando Gitea para que reconozca los nuevos datos..."
-docker restart drp_gitea
-
-echo "¡DRP FINALIZADO CON ETSITO!"
+echo "🎉 DRP FINALIZADO CON ÉXITO"
 EOF
 }
