@@ -18,7 +18,7 @@ MAQUINAS = {
 INTENTOS_MAXIMOS = 3         # Fallos seguidos antes de darla por muerta
 TIEMPO_ENTRE_RONDAS = 15     # Segundos que espera antes de volver a revisar todas
 WEBHOOK_DISCORD = "https://discord.com/api/webhooks/1494364227287384246/YpVgL1pgJ46MLCGWGcFXMqiUmPCrRRUhEJGxGPBRRPK9jFLGtaXKi_MzxAron2eI92rN" # Pon tu Webhook real
-PATH_TERRAFORM = "C:\\DRP"
+PATH_TERRAFORM = "/home/ubuntu/proyecto-DRP"
 
 # Diccionarios internos para llevar la cuenta de cada máquina
 fallos_consecutivos = {nombre: 0 for nombre in MAQUINAS}
