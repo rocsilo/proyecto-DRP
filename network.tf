@@ -30,3 +30,8 @@ resource "aws_route_table_association" "drp_rta" {
   subnet_id      = aws_subnet.drp_subnet.id
   route_table_id = aws_route_table.drp_rt.id
 }
+
+resource "aws_eip_association" "drp_eip_assoc" {
+  instance_id   = aws_instance.drp_server.id
+  allocation_id = "eipalloc-020e8f22efa569e25"
+}

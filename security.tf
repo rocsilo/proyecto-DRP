@@ -1,6 +1,7 @@
 resource "aws_security_group" "drp_sg" {
   name        = "drp_security_group"
   description = "Reglas de firewall para el servidor de rescate DRP (Grupo 5)"
+  vpc_id      = aws_vpc.drp_vpc.id
 
   # 1. Regla para conectarse por SSH a la máquina de AWS (Terminal negra)
   ingress {

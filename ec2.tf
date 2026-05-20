@@ -5,6 +5,7 @@
 resource "aws_instance" "drp_server" {
   ami           = "ami-0cd59ecaf368e5ccf"
   instance_type = "t3.medium"
+  subnet_id     = aws_subnet.drp_subnet.id
   vpc_security_group_ids = [aws_security_group.drp_sg.id]
   iam_instance_profile   = "LabInstanceProfile"
 

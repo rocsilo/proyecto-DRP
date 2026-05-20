@@ -2,7 +2,7 @@ import os
 import time
 import subprocess
 import requests
-
+import json
 # ==========================================
 # ⚙️ CONFIGURACIÓN DE LA FLOTA TAILSCALE
 # ==========================================
@@ -62,6 +62,35 @@ def activar_rescate_aws(nombre_caida):
             subprocess.run(["terraform", "apply", "-auto-approve"], cwd=PATH_TERRAFORM, capture_output=True, text=True, check=True)
             enviar_discord("✅ **RESCATE COMPLETADO.**\nLa infraestructura espejo está operativa en el Cloud.", color="65280")
             print("Terraform finalizado correctamente.")
+            print("🌐 [DNS] Conectando con la API de cdmon para redirigir el tráfico...")
+            
+            url_api = "https://api-domains.cdmon.services/api-domains/dnsrecords/edit"
+            headers = {
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "apikey": "3WdR0Fjs7v92FSQErCaiQboagf40S07h"  
+            }
+            body_dns = {
+                "data": {
+                    "domain": "mandretin.xyz",
+                    "current": {
+                        "host": "git",
+                        "type": "A"
+                    },
+                    "new": {
+                        "ttl": 300,                  
+                        "destination": "35.172.67.186"
+                    }
+                }
+            }
+            try:
+                respuesta = requests.post(url_api, headers=headers, json=body_dns, timeout=10)
+                if respuesta.status_code in [200, 201]:
+                    print("✅ [DNS] ¡Actualización exitosa! git.mandretin.xyz ahora apunta a AWS (35.172.67.186)")
+                else:
+                    print(f"⚠️ [DNS] Error en la API de cdmon. Código: {respuesta.status_code} - Respuesta: {respuesta.text}")
+            except Exception as e:
+                print(f"❌ [DNS] Error crítico de conexión con cdmon: {e}")
         else:
             print("⚠️ Modo simulación: Terraform no configurado aún.")
             enviar_discord("⚠️ **SIMULACIÓN:** Terraform no está configurado, pero el Watchdog ha hecho su trabajo.", color="16705372")
